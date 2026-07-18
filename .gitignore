@@ -8,5 +8,6 @@ bin/
 *.db-wal
 ProductTrackerBot/IDENTITY.md
 nginx/certs/
+backups/
 html-landing/index.html
 appsettings.Development.json
