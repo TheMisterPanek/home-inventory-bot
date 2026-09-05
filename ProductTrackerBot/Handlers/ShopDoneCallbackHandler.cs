@@ -5,16 +5,15 @@
 namespace ProductTrackerBot.Handlers;
 
 using Microsoft.Extensions.Logging;
-using ProductTrackerBot.Localization;
 using ProductTrackerBot.Models;
 using ProductTrackerBot.Repositories;
 using ProductTrackerBot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.ReplyMarkups;
 
 /// <summary>
-/// Handles the "✓" buy button — marks an item as bought, deletes it, and optionally captures price info.
+/// Handles the "✓" buy button — marks an item as bought and deletes it silently: no confirmation message
+/// and no follow-up prompts, just the list message re-rendered in the same view (page and tag filters kept).
 /// </summary>
 public class ShopDoneCallbackHandler : ICallbackHandler
 {
@@ -23,10 +22,6 @@ public class ShopDoneCallbackHandler : ICallbackHandler
     private readonly ShoppingListService listService;
     private readonly GroupRepository groupRepository;
     private readonly IHistoryRepository historyRepository;
-    private readonly PendingDialogService<PriceCaptureDialogState> priceDialogService;
-    private readonly PendingDialogService<TagCaptureDialogState> tagDialogService;
-    private readonly PurchaseHistoryRepository purchaseRepository;
-    private readonly ILocalizer localizer;
     private readonly ILogger<ShopDoneCallbackHandler> logger;
 
     /// <summary>
@@ -37,10 +32,6 @@ public class ShopDoneCallbackHandler : ICallbackHandler
     /// <param name="listService">The shopping list service.</param>
     /// <param name="groupRepository">The group repository.</param>
     /// <param name="historyRepository">The history repository.</param>
-    /// <param name="priceDialogService">The price-capture dialog state service.</param>
-    /// <param name="tagDialogService">The tag-capture dialog state service, cleared when a price-capture prompt starts so a stale tag dialog cannot steal the reply.</param>
-    /// <param name="purchaseRepository">The purchase history repository.</param>
-    /// <param name="localizer">The localizer for retrieving localized messages.</param>
     /// <param name="logger">The logger.</param>
     public ShopDoneCallbackHandler(
         ITelegramBotClient botClient,
@@ -48,10 +39,6 @@ public class ShopDoneCallbackHandler : ICallbackHandler
         ShoppingListService listService,
         GroupRepository groupRepository,
         IHistoryRepository historyRepository,
-        PendingDialogService<PriceCaptureDialogState> priceDialogService,
-        PendingDialogService<TagCaptureDialogState> tagDialogService,
-        PurchaseHistoryRepository purchaseRepository,
-        ILocalizer localizer,
         ILogger<ShopDoneCallbackHandler> logger)
     {
         this.botClient = botClient;
@@ -59,10 +46,6 @@ public class ShopDoneCallbackHandler : ICallbackHandler
         this.listService = listService;
         this.groupRepository = groupRepository;
         this.historyRepository = historyRepository;
-        this.priceDialogService = priceDialogService;
-        this.tagDialogService = tagDialogService;
-        this.purchaseRepository = purchaseRepository;
-        this.localizer = localizer;
         this.logger = logger;
     }
 
@@ -77,9 +60,9 @@ public class ShopDoneCallbackHandler : ICallbackHandler
             return;
         }
 
-        var itemIdStr = callbackQuery.Data["shop:done:".Length..];
-        if (!int.TryParse(itemIdStr, out var itemId))
+        if (!ListViewContext.TryParse(callbackQuery.Data, this.CallbackPrefix, out var itemId, out var context))
         {
+            this.logger.LogWarning("Invalid data in shop:done callback: {Data}", callbackQuery.Data);
             return;
         }
 
@@ -93,37 +76,27 @@ public class ShopDoneCallbackHandler : ICallbackHandler
         // Delete the item
         await this.itemRepository.DeleteAsync(itemId);
 
-        // Rebuild and update the list message
-        await this.UpdateListMessageAsync(callbackQuery.Message.Chat.Id, callbackQuery.Message.MessageId, cancellationToken);
-
-        var displayName = callbackQuery.From.FirstName;
+        // Rebuild and update the list message in the same view the button was tapped from
+        var chatId = callbackQuery.Message.Chat.Id;
+        await this.UpdateListMessageAsync(chatId, callbackQuery.Message.MessageId, context, cancellationToken);
 
         await this.botClient.AnswerCallbackQuery(
             callbackQueryId: callbackQuery.Id,
             cancellationToken: cancellationToken);
 
-        // Send confirmation
-        var buttonText = item.Quantity is not null
-            ? $"{item.Name} {item.Quantity}"
-            : item.Name;
-
-        var confirmText = this.localizer.Get(callbackQuery.Message.Chat.Id, "shop.done-confirmation")
-            .Replace("{name}", displayName ?? "Unknown")
-            .Replace("{item}", buttonText);
-
-        await this.botClient.SendMessage(
-            chatId: callbackQuery.Message.Chat.Id,
-            text: confirmText,
-            cancellationToken: cancellationToken);
+        var displayName = callbackQuery.From.FirstName;
 
         try
         {
+            var buttonText = item.Quantity is not null
+                ? $"{item.Name} {item.Quantity}"
+                : item.Name;
             var payload = new ItemPayload(buttonText, null);
             var payloadJson = System.Text.Json.JsonSerializer.Serialize(payload, BotActionPayloadContext.Default.ItemPayload);
             var revertPayload = new ItemBoughtRevert(item.Id, item.Name, item.Quantity, item.GroupId);
             var revertPayloadJson = System.Text.Json.JsonSerializer.Serialize(revertPayload, BotActionPayloadContext.Default.ItemBoughtRevert);
             await this.historyRepository.RecordAsync(
-                chatId: callbackQuery.Message.Chat.Id,
+                chatId: chatId,
                 userId: callbackQuery.From.Id,
                 userName: displayName ?? "Unknown",
                 actionType: BotActionType.ItemBought,
@@ -135,59 +108,13 @@ public class ShopDoneCallbackHandler : ICallbackHandler
         {
             this.logger.LogWarning(ex, "Failed to record history for ItemBought");
         }
-
-        // Fetch top shops for suggestions
-        var group = await this.groupRepository.GetOrCreateAsync(callbackQuery.Message.Chat.Id);
-        var topShops = await this.purchaseRepository.GetTopShopsAsync(group.Id, callbackQuery.From.Id, 5);
-
-        // Start price-capture dialog
-        var state = new PriceCaptureDialogState
-        {
-            Step = 1,
-            GroupId = group.Id,
-            ItemName = item.Name,
-            Quantity = item.Quantity,
-            BoughtByName = displayName ?? "Unknown",
-            TopShops = topShops.Count > 0 ? new List<string>(topShops) : null,
-            Tags = item.Tags,
-        };
-        this.tagDialogService.ClearState(callbackQuery.Message.Chat.Id, callbackQuery.From.Id);
-        this.priceDialogService.SetState(callbackQuery.Message.Chat.Id, callbackQuery.From.Id, state);
-
-        // Build keyboard with shop suggestion buttons and Skip button
-        var keyboard = this.BuildShopKeyboard(callbackQuery.Message.Chat.Id, topShops);
-
-        var whereBoughtText = this.localizer.Get(callbackQuery.Message.Chat.Id, "shop.where-bought")
-            .Replace("{item}", item.Name);
-
-        await this.botClient.SendMessage(
-            chatId: callbackQuery.Message.Chat.Id,
-            text: whereBoughtText,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
     }
 
-    private InlineKeyboardMarkup BuildShopKeyboard(long chatId, IReadOnlyList<string> topShops)
+    private async Task UpdateListMessageAsync(long chatId, int messageId, ListViewContext context, CancellationToken cancellationToken)
     {
-        var rows = new List<InlineKeyboardButton[]>();
-
-        for (int i = 0; i < topShops.Count; i++)
-        {
-            rows.Add(new[] { InlineKeyboardButton.WithCallbackData(topShops[i], $"price:shop:{i}") });
-        }
-
-        rows.Add(new[]
-        {
-            InlineKeyboardButton.WithCallbackData(this.localizer.Get(chatId, "shop.skip"), "price:skip_store"),
-            InlineKeyboardButton.WithCallbackData(this.localizer.Get(chatId, "shop.undo-button"), "undo:inline"),
-        });
-
-        return new InlineKeyboardMarkup(rows);
-    }
-
-    private async Task UpdateListMessageAsync(long chatId, int messageId, CancellationToken cancellationToken)
-    {
-        var (messageText, keyboard, group) = await this.listService.BuildListAsync(chatId);
+        var group = await this.groupRepository.GetOrCreateAsync(chatId);
+        var tagNames = await this.listService.ResolveTagNamesAsync(group.Id, context.TagIndices);
+        var (messageText, keyboard, _) = await this.listService.BuildListAsync(chatId, context.PageNumber, tagNames, context.TagPageNumber);
 
         try
         {

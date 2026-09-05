@@ -12,7 +12,8 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 
 /// <summary>
-/// Handles the "✗ Убрать" button — removes an item from the list without buying.
+/// Handles the "✕" button — removes an item from the list without buying, then re-renders the list
+/// message in the same view (page and tag filters kept).
 /// </summary>
 public class ShopRemoveCallbackHandler : ICallbackHandler
 {
@@ -59,9 +60,9 @@ public class ShopRemoveCallbackHandler : ICallbackHandler
             return;
         }
 
-        var itemIdStr = callbackQuery.Data["shop:remove:".Length..];
-        if (!int.TryParse(itemIdStr, out var itemId))
+        if (!ListViewContext.TryParse(callbackQuery.Data, this.CallbackPrefix, out var itemId, out var context))
         {
+            this.logger.LogWarning("Invalid data in shop:remove callback: {Data}", callbackQuery.Data);
             return;
         }
 
@@ -71,8 +72,11 @@ public class ShopRemoveCallbackHandler : ICallbackHandler
         // Delete the item
         await this.itemRepository.DeleteAsync(itemId);
 
-        // Rebuild and update the list message
-        var (messageText, keyboard, group) = await this.listService.BuildListAsync(callbackQuery.Message.Chat.Id);
+        // Rebuild and update the list message in the same view the button was tapped from
+        var group = await this.groupRepository.GetOrCreateAsync(callbackQuery.Message.Chat.Id);
+        var tagNames = await this.listService.ResolveTagNamesAsync(group.Id, context.TagIndices);
+        var (messageText, keyboard, _) = await this.listService.BuildListAsync(
+            callbackQuery.Message.Chat.Id, context.PageNumber, tagNames, context.TagPageNumber);
 
         try
         {

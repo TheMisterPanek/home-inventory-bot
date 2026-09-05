@@ -123,12 +123,14 @@ public class ShoppingListService
     /// <param name="pageNumber">The page number for pagination (1-based; defaults to 1).</param>
     /// <param name="activeTagNames">Optional set of currently-active tag filters (OR semantics, case-insensitive); null/empty = unfiltered.</param>
     /// <param name="tagPageNumber">The tag-filter page number (1-based; defaults to 1). Out-of-range values clamp to 1.</param>
+    /// <param name="selectedItemId">The ID of the item whose action buttons are expanded; null/0 = every row collapsed.</param>
     /// <returns>A tuple of (messageText, inlineKeyboard, group).</returns>
     public virtual async Task<(string MessageText, InlineKeyboardMarkup? Keyboard, Group Group)> BuildListAsync(
         long chatId,
         int pageNumber = 1,
         IReadOnlyCollection<string>? activeTagNames = null,
-        int tagPageNumber = 1)
+        int tagPageNumber = 1,
+        int? selectedItemId = null)
     {
         var group = await this.groupRepository.GetOrCreateAsync(chatId);
         var isFiltered = activeTagNames is { Count: > 0 };
@@ -167,29 +169,43 @@ public class ShoppingListService
         var sb = new StringBuilder(this.localizer.Get(chatId, "list.header") + "\n\n");
         sb.Append(FormatItemsAsText(allItems));
 
+        var activeIndexCsv = string.Join(",", activeIndices);
+        var viewSuffix = new ListViewContext(actualPageNumber, activeIndices, actualTagPageNumber).ToCallbackSuffix();
+
         var buttons = new List<List<InlineKeyboardButton>>();
         foreach (var itemGroup in pagedItems.GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase))
         {
             foreach (var item in itemGroup)
             {
                 var btnLabel = item.Quantity is not null
-                    ? $"✓ {item.Name} {item.Quantity}"
-                    : $"✓ {item.Name}";
+                    ? $"{item.Name} {item.Quantity}"
+                    : item.Name;
 
                 if (item.ExpDate.HasValue)
                 {
                     btnLabel += $" (до {item.ExpDate.Value:dd.MM})";
                 }
 
-                buttons.Add(
-                [
-                    InlineKeyboardButton.WithCallbackData(btnLabel, $"shop:done:{item.Id}"),
-                    InlineKeyboardButton.WithCallbackData(this.localizer.Get(chatId, "list.remove"), $"shop:remove:{item.Id}"),
-                ]);
+                if (selectedItemId == item.Id)
+                {
+                    // Expanded row: the name collapses it again, then the bought / remove actions.
+                    buttons.Add(
+                    [
+                        InlineKeyboardButton.WithCallbackData(btnLabel, $"shop:sel:0:{viewSuffix}"),
+                        InlineKeyboardButton.WithCallbackData(this.localizer.Get(chatId, "list.bought"), $"shop:done:{item.Id}:{viewSuffix}"),
+                        InlineKeyboardButton.WithCallbackData(this.localizer.Get(chatId, "list.remove"), $"shop:remove:{item.Id}:{viewSuffix}"),
+                    ]);
+                }
+                else
+                {
+                    // Collapsed row: the item name alone, spanning the full keyboard width.
+                    buttons.Add(
+                    [
+                        InlineKeyboardButton.WithCallbackData(btnLabel, $"shop:sel:{item.Id}:{viewSuffix}"),
+                    ]);
+                }
             }
         }
-
-        var activeIndexCsv = string.Join(",", activeIndices);
 
         // Add pagination buttons if there are multiple item-action pages
         if (totalPages > 1)
@@ -248,6 +264,29 @@ public class ShoppingListService
         ]);
 
         return (sb.ToString(), new InlineKeyboardMarkup(buttons), group);
+    }
+
+    /// <summary>
+    /// Resolves the tag names behind the zero-based indices carried in callback data, dropping indices that
+    /// no longer point at a tag (the tag set shifts as items are bought).
+    /// </summary>
+    /// <param name="groupId">The group ID.</param>
+    /// <param name="tagIndices">The zero-based tag indices.</param>
+    /// <returns>The resolved tag names, or null when nothing resolves (i.e. an unfiltered view).</returns>
+    public virtual async Task<IReadOnlyCollection<string>?> ResolveTagNamesAsync(int groupId, IReadOnlyList<int> tagIndices)
+    {
+        if (tagIndices.Count == 0)
+        {
+            return null;
+        }
+
+        var allTags = await this.tagRepository.GetDistinctTagsAsync(groupId) ?? Array.Empty<string>();
+        var resolved = tagIndices
+            .Where(idx => idx >= 0 && idx < allTags.Count)
+            .Select(idx => allTags[idx])
+            .ToList();
+
+        return resolved.Count > 0 ? resolved : null;
     }
 
     private List<List<InlineKeyboardButton>> BuildFilterSectionRows(

@@ -41,6 +41,7 @@
   "language.confirmation": "✓ Język zaktualizowany",
   "list.header": "📋 Lista zakupów",
   "list.empty": "Twoja lista zakupów jest pusta",
+  "list.bought": "✓",
   "list.remove": "✕",
   "shop:remove:{item.Id}": "🗑️",
   "prices.group-only": "❌ Polecenie /prices działa tylko w czatach grupowych.",

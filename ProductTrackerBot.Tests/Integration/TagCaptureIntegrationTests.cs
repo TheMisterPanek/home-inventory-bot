@@ -115,7 +115,14 @@ public class TagCaptureIntegrationTests : TelegramIntegrationTestBase
         var reloaded = await ItemRepository.GetByIdAsync(item.Id);
         Assert.Equal(2, reloaded!.Tags.Count);
 
-        await DispatchAsync(CallbackUpdate(-100, 42, 1, $"shop:done:{item.Id}"));
+        PriceDialogService.SetState(-100, 42, new Models.PriceCaptureDialogState
+        {
+            Step = 1,
+            GroupId = group.Id,
+            ItemName = "Bleach",
+            BoughtByName = "TestUser",
+            Tags = reloaded.Tags,
+        });
         await DispatchAsync(CallbackUpdate(-100, 42, 2, "price:skip_store"));
         await DispatchAsync(CallbackUpdate(-100, 42, 2, "price:skip_price"));
         await DispatchAsync(CallbackUpdate(-100, 42, 2, "price:skip_expiry"));
@@ -132,9 +139,15 @@ public class TagCaptureIntegrationTests : TelegramIntegrationTestBase
         await ClearDataAsync();
 
         var group = await GroupRepository.GetOrCreateAsync(-100);
-        var item = await ItemRepository.AddAsync(group.Id, "Soap", null, "TestUser", null);
+        await ItemRepository.AddAsync(group.Id, "Soap", null, "TestUser", null);
 
-        await DispatchAsync(CallbackUpdate(-100, 42, 1, $"shop:done:{item.Id}"));
+        PriceDialogService.SetState(-100, 42, new Models.PriceCaptureDialogState
+        {
+            Step = 1,
+            GroupId = group.Id,
+            ItemName = "Soap",
+            BoughtByName = "TestUser",
+        });
         await DispatchAsync(CallbackUpdate(-100, 42, 2, "price:skip_store"));
         await DispatchAsync(CallbackUpdate(-100, 42, 2, "price:skip_price"));
         await DispatchAsync(CallbackUpdate(-100, 42, 2, "price:skip_expiry"));

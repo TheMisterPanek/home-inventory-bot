@@ -147,7 +147,7 @@ public class CommandIntegrationTests : TelegramIntegrationTestBase
     }
 
     [Fact]
-    public async Task List_Item_Row_Has_Exactly_Two_Buttons_No_Edit_Button()
+    public async Task List_Item_Row_Is_A_Single_Select_Button_Until_Tapped()
     {
         await ClearDataAsync();
 
@@ -161,9 +161,9 @@ public class CommandIntegrationTests : TelegramIntegrationTestBase
         var keyboard = Assert.IsType<InlineKeyboardMarkup>(sent!.ReplyMarkup);
         var row = keyboard.InlineKeyboard.First();
 
-        Assert.Equal(2, row.Count());
-        Assert.DoesNotContain(row, btn => btn.CallbackData?.StartsWith("item:edit:") == true);
-        Assert.Contains(row, btn => btn.CallbackData?.StartsWith("shop:done:") == true);
-        Assert.Contains(row, btn => btn.CallbackData?.StartsWith("shop:remove:") == true);
+        var button = Assert.Single(row);
+        Assert.StartsWith("shop:sel:", button.CallbackData);
+        Assert.DoesNotContain(keyboard.InlineKeyboard.SelectMany(r => r), btn => btn.CallbackData?.StartsWith("shop:done:") == true);
+        Assert.DoesNotContain(keyboard.InlineKeyboard.SelectMany(r => r), btn => btn.CallbackData?.StartsWith("shop:remove:") == true);
     }
 }

@@ -59,6 +59,8 @@ public abstract class TelegramIntegrationTestBase : IDisposable
 
     protected PendingDialogService<BoughtDialogState> BoughtDialogService { get; private set; } = null!;
 
+    protected PendingDialogService<PriceCaptureDialogState> PriceDialogService { get; private set; } = null!;
+
     protected AiSuggestionService AiSuggestionService { get; private set; } = null!;
 
     protected LoginCodeStore LoginCodeStore { get; private set; } = null!;
@@ -119,6 +121,7 @@ public abstract class TelegramIntegrationTestBase : IDisposable
 
         var buyDialogService = new PendingDialogService<BuyDialogState>();
         var priceDialogService = new PendingDialogService<PriceCaptureDialogState>();
+        this.PriceDialogService = priceDialogService;
         var tagCaptureDialogService = new PendingDialogService<TagCaptureDialogState>();
         var mealCreateDialogService = new PendingDialogService<MealCreateDialogState>();
         var mealIngredientDialogService = new PendingDialogService<MealAddIngredientDialogState>();
@@ -205,8 +208,11 @@ public abstract class TelegramIntegrationTestBase : IDisposable
         // Callback handlers
         var shopDoneHandler = new ShopDoneCallbackHandler(
             this.BotMock.Object, this.ItemRepository, listService, this.GroupRepository,
-            this.HistoryRepository, priceDialogService, tagCaptureDialogService, this.PurchaseRepository,
-            localizer.Object, Mock.Of<ILogger<ShopDoneCallbackHandler>>());
+            this.HistoryRepository, Mock.Of<ILogger<ShopDoneCallbackHandler>>());
+
+        var shopSelectHandler = new ShopSelectCallbackHandler(
+            this.BotMock.Object, listService, this.GroupRepository,
+            Mock.Of<ILogger<ShopSelectCallbackHandler>>());
 
         var shopRemoveHandler = new ShopRemoveCallbackHandler(
             this.BotMock.Object, this.ItemRepository, listService, this.GroupRepository,
@@ -336,7 +342,7 @@ public abstract class TelegramIntegrationTestBase : IDisposable
 
         var callbackHandlers = new List<ICallbackHandler>
         {
-            shopDoneHandler, shopRemoveHandler, actionCancelHandler, langCallbackHandler,
+            shopSelectHandler, shopDoneHandler, shopRemoveHandler, actionCancelHandler, langCallbackHandler,
             langSelectionHandler, buySkipHandler, buySkipExpiryHandler, buyConfirmHandler,
             buyEditHandler, buyCancelHandler, listNextHandler, listPrevHandler, listFilterHandler, undoInlineHandler,
             priceSkipHandler, priceShopHandler, mealCallbackHandler, aiAddItemHandler,

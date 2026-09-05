@@ -201,6 +201,7 @@ builder.Services.AddScoped<ICallbackHandler, BuySkipCallbackHandler>();
 builder.Services.AddScoped<ICallbackHandler, BuyConfirmCallbackHandler>();
 builder.Services.AddScoped<ICallbackHandler, BuyEditCallbackHandler>();
 builder.Services.AddScoped<ICallbackHandler, BuyCancelCallbackHandler>();
+builder.Services.AddScoped<ICallbackHandler, ShopSelectCallbackHandler>();
 builder.Services.AddScoped<ICallbackHandler, ShopDoneCallbackHandler>();
 builder.Services.AddScoped<ICallbackHandler, ShopRemoveCallbackHandler>();
 builder.Services.AddScoped<ICallbackHandler, PriceSkipCallbackHandler>();

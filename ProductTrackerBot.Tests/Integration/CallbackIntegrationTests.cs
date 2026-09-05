@@ -7,7 +7,7 @@ namespace ProductTrackerBot.Tests.Integration;
 public class CallbackIntegrationTests : TelegramIntegrationTestBase
 {
     [Fact]
-    public async Task ShopDone_Marks_Item_Done_And_Sends_Reply()
+    public async Task ShopDone_Marks_Item_Done_Without_Sending_Any_Reply()
     {
         await ClearDataAsync();
 
@@ -19,9 +19,10 @@ public class CallbackIntegrationTests : TelegramIntegrationTestBase
         var remaining = await ItemRepository.GetAllAsync(group.Id);
         Assert.DoesNotContain(remaining, i => i.Id == item.Id);
 
+        // Buying is silent: no confirmation and no follow-up prompt, only the list message is edited
         BotMock.Verify(
             b => b.SendRequest(It.IsAny<SendMessageRequest>(), It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.Never);
     }
 
     [Fact]

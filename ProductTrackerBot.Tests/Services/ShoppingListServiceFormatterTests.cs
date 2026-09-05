@@ -216,6 +216,6 @@ public class ShoppingListServiceFormatterTests
         Assert.NotNull(keyboard);
         // item row + Cancel row
         Assert.Equal(2, keyboard!.InlineKeyboard.Count());
-        Assert.Equal("shop:done:1", keyboard.InlineKeyboard.First().First().CallbackData);
+        Assert.Equal("shop:sel:1:1::1", keyboard.InlineKeyboard.First().First().CallbackData);
     }
 }

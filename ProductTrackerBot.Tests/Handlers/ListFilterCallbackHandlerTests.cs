@@ -178,9 +178,9 @@ public class ListFilterCallbackHandlerTests
         bot.Verify(
             b => b.SendRequest(
                 It.Is<EditMessageTextRequest>(r =>
-                    r.ReplyMarkup!.InlineKeyboard.Count(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:done:"))) == ShoppingListService.ActionPageSize
-                    && r.ReplyMarkup!.InlineKeyboard.Any(row => row.Any(btn => btn.Text == $"✓ Товар{itemCount - 1}"))
-                    && r.ReplyMarkup!.InlineKeyboard.Any(row => row.Any(btn => btn.Text == $"✓ Товар{itemCount}"))),
+                    r.ReplyMarkup!.InlineKeyboard.Count(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:sel:"))) == ShoppingListService.ActionPageSize
+                    && r.ReplyMarkup!.InlineKeyboard.Any(row => row.Any(btn => btn.Text == $"Товар{itemCount - 1}"))
+                    && r.ReplyMarkup!.InlineKeyboard.Any(row => row.Any(btn => btn.Text == $"Товар{itemCount}"))),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

@@ -1,4 +1,5 @@
 using Moq;
+using ProductTrackerBot.Models;
 using Telegram.Bot.Requests;
 
 namespace ProductTrackerBot.Tests.Integration;
@@ -12,10 +13,10 @@ public class PriceCaptureIntegrationTests : TelegramIntegrationTestBase
         await ClearDataAsync();
 
         var group = await GroupRepository.GetOrCreateAsync(-100);
-        var item = await ItemRepository.AddAsync(group.Id, "Milk", "2l", "TestUser");
+        await ItemRepository.AddAsync(group.Id, "Milk", "2l", "TestUser");
 
-        // shop:done starts price capture (step 1 = store name)
-        await DispatchAsync(CallbackUpdate(-100, 42, 99, $"shop:done:{item.Id}"));
+        // The price-capture dialog opens at step 1 (store name)
+        StartPriceCapture(group.Id, "Milk", "2l");
         // Step 1: enter store name
         await DispatchAsync(MessageUpdate(-100, 42, "Lidl"));
         // Step 2: enter price
@@ -33,9 +34,9 @@ public class PriceCaptureIntegrationTests : TelegramIntegrationTestBase
         await ClearDataAsync();
 
         var group = await GroupRepository.GetOrCreateAsync(-100);
-        var item = await ItemRepository.AddAsync(group.Id, "Eggs", null, "TestUser");
+        await ItemRepository.AddAsync(group.Id, "Eggs", null, "TestUser");
 
-        await DispatchAsync(CallbackUpdate(-100, 42, 99, $"shop:done:{item.Id}"));
+        StartPriceCapture(group.Id, "Eggs");
         BotMock.Invocations.Clear();
 
         // Skip the store step
@@ -52,9 +53,9 @@ public class PriceCaptureIntegrationTests : TelegramIntegrationTestBase
         await ClearDataAsync();
 
         var group = await GroupRepository.GetOrCreateAsync(-100);
-        var item = await ItemRepository.AddAsync(group.Id, "Coffee", null, "TestUser");
+        await ItemRepository.AddAsync(group.Id, "Coffee", null, "TestUser");
 
-        await DispatchAsync(CallbackUpdate(-100, 42, 99, $"shop:done:{item.Id}"));
+        StartPriceCapture(group.Id, "Coffee");
         await DispatchAsync(MessageUpdate(-100, 42, "Aldi"));
 
         // Skip price → advances to expiry step; skip expiry → saves purchase
@@ -71,9 +72,9 @@ public class PriceCaptureIntegrationTests : TelegramIntegrationTestBase
         await ClearDataAsync();
 
         var group = await GroupRepository.GetOrCreateAsync(-100);
-        var item = await ItemRepository.AddAsync(group.Id, "Butter", null, "TestUser");
+        await ItemRepository.AddAsync(group.Id, "Butter", null, "TestUser");
 
-        await DispatchAsync(CallbackUpdate(-100, 42, 99, $"shop:done:{item.Id}"));
+        StartPriceCapture(group.Id, "Butter");
         await DispatchAsync(MessageUpdate(-100, 42, "Aldi"));
         await DispatchAsync(MessageUpdate(-100, 42, "2.50"));
 
@@ -83,4 +84,19 @@ public class PriceCaptureIntegrationTests : TelegramIntegrationTestBase
         var records = await PurchaseRepository.SearchAsync(group.Id, "Butter");
         Assert.Contains(records, r => r.Price == 2.50m);
     }
+
+    /// <summary>
+    /// Opens the price-capture dialog at step 1. Marking an item bought no longer starts it (that flow is
+    /// silent now), so tests covering the dialog itself seed its state directly.
+    /// </summary>
+    private void StartPriceCapture(int groupId, string itemName, string? quantity = null, IReadOnlyList<string>? tags = null) =>
+        PriceDialogService.SetState(-100, 42, new PriceCaptureDialogState
+        {
+            Step = 1,
+            GroupId = groupId,
+            ItemName = itemName,
+            Quantity = quantity,
+            BoughtByName = "TestUser",
+            Tags = tags ?? Array.Empty<string>(),
+        });
 }

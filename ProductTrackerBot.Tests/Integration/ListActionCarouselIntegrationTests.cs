@@ -31,7 +31,7 @@ public class ListActionCarouselIntegrationTests : TelegramIntegrationTestBase
 
         var keyboard = Assert.IsType<InlineKeyboardMarkup>(sent!.ReplyMarkup);
         var actionRows = keyboard.InlineKeyboard
-            .Where(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:done:")))
+            .Where(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:sel:")))
             .ToList();
         Assert.Equal(ShoppingListService.ActionPageSize, actionRows.Count);
 
@@ -59,7 +59,7 @@ public class ListActionCarouselIntegrationTests : TelegramIntegrationTestBase
         Assert.NotNull(page2);
         var page2Keyboard = Assert.IsType<InlineKeyboardMarkup>(page2!.ReplyMarkup);
         var page2ActionRows = page2Keyboard.InlineKeyboard
-            .Where(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:done:")))
+            .Where(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:sel:")))
             .ToList();
         Assert.Equal(itemCount - ShoppingListService.ActionPageSize, page2ActionRows.Count);
         Assert.Contains(page2Keyboard.InlineKeyboard.SelectMany(row => row), btn => btn.CallbackData!.StartsWith("list_prev:"));
@@ -69,7 +69,7 @@ public class ListActionCarouselIntegrationTests : TelegramIntegrationTestBase
         Assert.NotNull(page1);
         var page1Keyboard = Assert.IsType<InlineKeyboardMarkup>(page1!.ReplyMarkup);
         var page1ActionRows = page1Keyboard.InlineKeyboard
-            .Where(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:done:")))
+            .Where(row => row.Any(btn => btn.CallbackData!.StartsWith("shop:sel:")))
             .ToList();
         Assert.Equal(ShoppingListService.ActionPageSize, page1ActionRows.Count);
     }

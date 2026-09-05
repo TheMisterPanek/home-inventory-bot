@@ -79,11 +79,9 @@ public class ShoppingListServiceTests
         Assert.Equal(2, keyboard!.InlineKeyboard.Count());
 
         var row = keyboard.InlineKeyboard.First();
-        Assert.Equal(2, row.Count());
-        Assert.StartsWith("✓", row.First().Text);
-        Assert.Equal("shop:done:1", row.First().CallbackData);
-        Assert.Equal("list.remove", row.Last().Text);
-        Assert.Equal("shop:remove:1", row.Last().CallbackData);
+        var button = Assert.Single(row);
+        Assert.Equal("Молоко 2л", button.Text);
+        Assert.Equal("shop:sel:1:1::1", button.CallbackData);
     }
 
     [Fact]
@@ -112,12 +110,10 @@ public class ShoppingListServiceTests
 
         // Verify callback data for both items
         var firstRow = keyboard.InlineKeyboard.First();
-        Assert.Equal("shop:done:1", firstRow.First().CallbackData);
-        Assert.Equal("shop:remove:1", firstRow.Last().CallbackData);
+        Assert.Equal("shop:sel:1:1::1", Assert.Single(firstRow).CallbackData);
 
         var secondRow = keyboard.InlineKeyboard.ElementAt(1);
-        Assert.Equal("shop:done:2", secondRow.First().CallbackData);
-        Assert.Equal("shop:remove:2", secondRow.Last().CallbackData);
+        Assert.Equal("shop:sel:2:1::1", Assert.Single(secondRow).CallbackData);
     }
 
     [Fact]
@@ -138,8 +134,7 @@ public class ShoppingListServiceTests
         var (text, keyboard, _) = await service.BuildListAsync(1);
 
         Assert.Contains("• Хлеб", text); // Should not have quantity after the name
-        // The button text should still show "Хлеб" for the checkmark
-        Assert.Contains("✓ Хлеб", keyboard!.InlineKeyboard.First().First().Text);
+        Assert.Equal("Хлеб", keyboard!.InlineKeyboard.First().First().Text);
     }
 
     [Fact]
@@ -340,6 +335,77 @@ public class ShoppingListServiceTests
         Assert.Equal(1, totalPages);
         Assert.Equal(1, actualPage);
         Assert.Equal(new[] { 1, 3 }, pagedItems.Select(i => i.Id));
+    }
+
+    [Fact]
+    public async Task SelectedItem_Row_Expands_Into_Name_Bought_And_Remove_Buttons()
+    {
+        var groupRepo = CreateGroupRepoMock(chatId: 1, groupId: 10);
+        var itemRepo = new Mock<ShoppingItemRepository>("Data Source=file::memory:?cache=shared");
+        var items = new List<ShoppingItem>
+        {
+            new() { Id = 1, GroupId = 10, Name = "Молоко", Quantity = "2л", AddedByName = "Иван" },
+            new() { Id = 2, GroupId = 10, Name = "Хлеб", AddedByName = "Мария" },
+        };
+        itemRepo.Setup(r => r.GetAllAsync(10)).ReturnsAsync(items.AsReadOnly());
+
+        var service = new ShoppingListService(groupRepo.Object, itemRepo.Object,
+                new Mock<TagRepository>("Data Source=file::memory:").Object, CreateLocalizerMock().Object);
+
+        var (_, keyboard, _) = await service.BuildListAsync(1, selectedItemId: 1);
+
+        var expandedRow = keyboard!.InlineKeyboard.First().ToList();
+        Assert.Equal(3, expandedRow.Count);
+        Assert.Equal("Молоко 2л", expandedRow[0].Text);
+        Assert.Equal("shop:sel:0:1::1", expandedRow[0].CallbackData); // tapping the name collapses the row
+        Assert.Equal("list.bought", expandedRow[1].Text);
+        Assert.Equal("shop:done:1:1::1", expandedRow[1].CallbackData);
+        Assert.Equal("list.remove", expandedRow[2].Text);
+        Assert.Equal("shop:remove:1:1::1", expandedRow[2].CallbackData);
+
+        // The other item stays collapsed
+        var collapsedRow = keyboard.InlineKeyboard.ElementAt(1);
+        Assert.Equal("shop:sel:2:1::1", Assert.Single(collapsedRow).CallbackData);
+    }
+
+    [Fact]
+    public async Task ItemButtons_CarryActiveFilterAndPage_InCallbackData()
+    {
+        var groupRepo = CreateGroupRepoMock(chatId: 1, groupId: 10);
+        var itemRepo = new Mock<ShoppingItemRepository>("Data Source=file::memory:?cache=shared");
+        var items = new List<ShoppingItem>
+        {
+            new() { Id = 7, GroupId = 10, Name = "Белизна", AddedByName = "Ivan", Tags = new[] { "Химия" } },
+        };
+        itemRepo.Setup(r => r.GetAllAsync(10)).ReturnsAsync(items.AsReadOnly());
+        var tagRepo = new Mock<TagRepository>("Data Source=file::memory:");
+        tagRepo.Setup(r => r.GetDistinctTagsAsync(10)).ReturnsAsync(new List<string> { "Еда", "Химия" });
+
+        var service = new ShoppingListService(groupRepo.Object, itemRepo.Object, tagRepo.Object, CreateLocalizerMock().Object);
+
+        var (_, keyboard, _) = await service.BuildListAsync(1, activeTagNames: new[] { "Химия" }, selectedItemId: 7);
+
+        var expandedRow = keyboard!.InlineKeyboard.First().ToList();
+        Assert.Equal("shop:done:7:1:1:1", expandedRow[1].CallbackData);
+        Assert.Equal("shop:remove:7:1:1:1", expandedRow[2].CallbackData);
+    }
+
+    [Fact]
+    public async Task ResolveTagNamesAsync_MapsIndices_AndDropsStaleOnes()
+    {
+        var groupRepo = CreateGroupRepoMock(chatId: 1, groupId: 10);
+        var tagRepo = new Mock<TagRepository>("Data Source=file::memory:");
+        tagRepo.Setup(r => r.GetDistinctTagsAsync(10)).ReturnsAsync(new List<string> { "Еда", "Химия" });
+
+        var service = new ShoppingListService(
+            groupRepo.Object,
+            new Mock<ShoppingItemRepository>("Data Source=file::memory:?cache=shared").Object,
+            tagRepo.Object,
+            CreateLocalizerMock().Object);
+
+        Assert.Equal(new[] { "Химия" }, await service.ResolveTagNamesAsync(10, new[] { 1, 9 }));
+        Assert.Null(await service.ResolveTagNamesAsync(10, Array.Empty<int>()));
+        Assert.Null(await service.ResolveTagNamesAsync(10, new[] { 42 }));
     }
 
     [Fact]

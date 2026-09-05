@@ -41,6 +41,7 @@
   "language.confirmation": "✓ Язык обновлен",
   "list.header": "📋 Список покупок",
   "list.empty": "Ваш список покупок пуст",
+  "list.bought": "✓",
   "list.remove": "✕",
   "shop:remove:{item.Id}": "🗑️",
   "prices.group-only": "❌ Команда /prices работает только в групповых чатах.",

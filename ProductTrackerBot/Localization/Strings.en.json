@@ -41,6 +41,7 @@
   "language.confirmation": "✓ Language updated",
   "list.header": "📋 Shopping List",
   "list.empty": "Your shopping list is empty",
+  "list.bought": "✓",
   "list.remove": "✕",
   "shop:remove:{item.Id}": "🗑️",
   "prices.group-only": "❌ The /prices command only works in group chats.",

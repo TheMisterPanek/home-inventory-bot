@@ -47,7 +47,7 @@ public class TagCaptureDialogTests
         var localizer = Mock.Of<ILocalizer>();
         var listServiceMock = new Mock<ShoppingListService>(groupRepo.Object, itemRepo.Object, tagRepo.Object, localizer);
         listServiceMock
-            .Setup(s => s.BuildListAsync(It.IsAny<long>(), It.IsAny<int>(), null, It.IsAny<int>()))
+            .Setup(s => s.BuildListAsync(It.IsAny<long>(), It.IsAny<int>(), null, It.IsAny<int>(), It.IsAny<int?>()))
             .ReturnsAsync(("list", null, new Group { Id = 10, ChatId = -100L }));
         return listServiceMock;
     }
@@ -304,7 +304,7 @@ public class TagCaptureDialogTests
             Times.Once);
         Assert.Null(dialogService.GetState(-100L, 42L));
 
-        listService.Verify(s => s.BuildListAsync(-100L, 1, null, It.IsAny<int>()), Times.Once);
+        listService.Verify(s => s.BuildListAsync(-100L, 1, null, It.IsAny<int>(), It.IsAny<int?>()), Times.Once);
         bot.Verify(
             b => b.SendRequest(
                 It.Is<SendMessageRequest>(r => r.ChatId! == -100L && r.Text == "list"),
@@ -362,7 +362,7 @@ public class TagCaptureDialogTests
         Assert.Null(dialogService.GetState(-100L, 42L));
         bot.Verify(b => b.SendRequest(It.IsAny<EditMessageTextRequest>(), It.IsAny<CancellationToken>()), Times.Once);
 
-        listService.Verify(s => s.BuildListAsync(-100L, 1, null, It.IsAny<int>()), Times.Once);
+        listService.Verify(s => s.BuildListAsync(-100L, 1, null, It.IsAny<int>(), It.IsAny<int?>()), Times.Once);
         bot.Verify(
             b => b.SendRequest(
                 It.Is<SendMessageRequest>(r => r.ChatId! == -100L && r.Text == "list"),

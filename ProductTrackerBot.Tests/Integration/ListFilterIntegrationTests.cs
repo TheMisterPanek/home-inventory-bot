@@ -158,11 +158,11 @@ public class ListFilterIntegrationTests : TelegramIntegrationTestBase
         var lastPageKeyboard = Assert.IsType<InlineKeyboardMarkup>(lastPageEdit!.ReplyMarkup);
         var itemButtons = lastPageKeyboard.InlineKeyboard
             .SelectMany(row => row)
-            .Where(btn => btn.CallbackData?.StartsWith("shop:done:") == true)
+            .Where(btn => btn.CallbackData?.StartsWith("shop:sel:") == true)
             .Select(btn => btn.Text)
             .ToList();
         Assert.Equal(ShoppingListService.ActionPageSize, itemButtons.Count);
-        Assert.Contains($"✓ Товар{itemCount - 1}", itemButtons);
-        Assert.Contains($"✓ Товар{itemCount}", itemButtons);
+        Assert.Contains($"Товар{itemCount - 1}", itemButtons);
+        Assert.Contains($"Товар{itemCount}", itemButtons);
     }
 }
